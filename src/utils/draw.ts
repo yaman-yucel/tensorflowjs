@@ -64,12 +64,14 @@ function drawBox(ctx: CanvasRenderingContext2D, det: Detection): void {
   ctx.lineWidth = BOX_LINE_WIDTH
   ctx.strokeRect(x1, y1, x2 - x1, y2 - y1)
 
-  // Score label
+  // Score label — flip below the box top when near the top edge
   const label = `doc ${(det.score * 100).toFixed(0)}%`
   ctx.font = 'bold 14px system-ui'
   const textWidth = ctx.measureText(label).width
+  const labelH = 20
+  const labelY = y1 < labelH ? y1 : y1 - labelH
   ctx.fillStyle = BOX_COLOR
-  ctx.fillRect(x1, y1 - 20, textWidth + 8, 20)
+  ctx.fillRect(x1, labelY, textWidth + 8, labelH)
   ctx.fillStyle = '#000'
-  ctx.fillText(label, x1 + 4, y1 - 5)
+  ctx.fillText(label, x1 + 4, labelY + labelH - 5)
 }

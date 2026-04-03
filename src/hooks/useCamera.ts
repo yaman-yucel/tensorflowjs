@@ -5,7 +5,10 @@ export type CameraState =
   | { status: 'ready' }
   | { status: 'error'; message: string }
 
-export function useCamera(videoRef: React.RefObject<HTMLVideoElement | null>): CameraState {
+export function useCamera(
+  videoRef: React.RefObject<HTMLVideoElement | null>,
+  deviceId?: string,
+): CameraState {
   const [state, setState] = useState<CameraState>({ status: 'requesting' })
   const streamRef = useRef<MediaStream | null>(null)
 
@@ -13,19 +16,21 @@ export function useCamera(videoRef: React.RefObject<HTMLVideoElement | null>): C
     let cancelled = false
 
     async function startCamera() {
-      // Snapshot the element now — after the getUserMedia await the ref could
-      // theoretically point to a different element (concurrent rendering).
       const videoEl = videoRef.current
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
+        const constraints: MediaStreamConstraints = {
+          video: deviceId
+            ? { deviceId: { exact: deviceId } }
+            : {
+                facingMode: { ideal: 'environment' },
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+              },
           audio: false,
-        })
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints)
 
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop())
@@ -41,9 +46,6 @@ export function useCamera(videoRef: React.RefObject<HTMLVideoElement | null>): C
 
         setState({ status: 'ready' })
       } catch (err) {
-        // Stop any acquired stream immediately — play() can reject (e.g. iOS
-        // autoplay policy) after the stream is already attached, leaving the
-        // camera active while an error screen is shown.
         streamRef.current?.getTracks().forEach((t) => t.stop())
         streamRef.current = null
 
@@ -56,6 +58,7 @@ export function useCamera(videoRef: React.RefObject<HTMLVideoElement | null>): C
       }
     }
 
+    setState({ status: 'requesting' })
     void startCamera()
 
     return () => {
@@ -63,7 +66,7 @@ export function useCamera(videoRef: React.RefObject<HTMLVideoElement | null>): C
       streamRef.current?.getTracks().forEach((t) => t.stop())
       streamRef.current = null
     }
-  }, [videoRef])
+  }, [videoRef, deviceId])
 
   return state
 }

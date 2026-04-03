@@ -11,13 +11,18 @@ export function useModel(modelUrl: string): ModelState {
 
   useEffect(() => {
     let cancelled = false
+    let loadedModel: tf.GraphModel | null = null
 
     async function load() {
       try {
         await tf.ready()
         const model = await tf.loadGraphModel(modelUrl)
         if (!cancelled) {
+          loadedModel = model
           setState({ status: 'ready', model })
+        } else {
+          // Loaded after the effect was already cleaned up — dispose immediately
+          model.dispose()
         }
       } catch (err) {
         if (!cancelled) {
@@ -33,6 +38,7 @@ export function useModel(modelUrl: string): ModelState {
 
     return () => {
       cancelled = true
+      loadedModel?.dispose()
     }
   }, [modelUrl])
 

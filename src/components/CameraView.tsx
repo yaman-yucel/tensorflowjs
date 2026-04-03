@@ -39,54 +39,69 @@ export function CameraView({ model }: Props) {
   useEffect(() => {
     if (cameraState.status !== 'ready') return
 
+    let cancelled = false
+    let inFlight = false
     let lastTime = performance.now()
 
-    const intervalId = setInterval(async () => {
+    const intervalId = setInterval(() => {
+      // Drop frame if a previous inference is still running
+      if (inFlight || cancelled) return
+
       const video = videoRef.current
       const canvas = canvasRef.current
-      if (!video || !canvas || video.readyState < 2) return
-      if (video.videoWidth === 0) return
+      if (!video || !canvas || video.readyState < 2 || video.videoWidth === 0) return
 
-      const input = preprocessFrame(video)
-      let output0: tf.Tensor
-      let output1: tf.Tensor
+      inFlight = true
 
-      try {
-        // Ultralytics TF.js export produces two outputs: output0 & output1
-        const outputs = model.execute(input) as tf.Tensor[]
-        // Some exports return an object — handle both cases
-        if (Array.isArray(outputs)) {
-          ;[output0, output1] = outputs
-        } else {
-          const outObj = outputs as unknown as Record<string, tf.Tensor>
-          output0 = outObj['output0']
-          output1 = outObj['output1']
+      void (async () => {
+        const input = preprocessFrame(video)
+        let output0: tf.Tensor | undefined
+        let output1: tf.Tensor | undefined
+
+        try {
+          // model.execute can return Tensor | Tensor[] | NamedTensorMap
+          const raw = model.execute(input)
+
+          if (Array.isArray(raw)) {
+            ;[output0, output1] = raw
+          } else if (raw instanceof tf.Tensor) {
+            // Unexpected single-tensor output — not a YOLO-seg model
+            raw.dispose()
+            return
+          } else {
+            const outObj = raw as Record<string, tf.Tensor>
+            output0 = outObj['output0']
+            output1 = outObj['output1']
+          }
+
+          const detections = await postprocess(
+            output0,
+            output1,
+            canvas.width,
+            canvas.height,
+          )
+
+          // Don't update DOM after unmount
+          if (cancelled) return
+
+          drawDetections(canvas, detections)
+
+          const now = performance.now()
+          setFps(Math.round(1000 / (now - lastTime)))
+          lastTime = now
+        } finally {
+          input.dispose()
+          output0?.dispose()
+          output1?.dispose()
+          inFlight = false
         }
-      } catch {
-        input.dispose()
-        return
-      }
-
-      input.dispose()
-
-      const detections = await postprocess(
-        output0,
-        output1,
-        canvas.width,
-        canvas.height,
-      )
-
-      output0.dispose()
-      output1.dispose()
-
-      drawDetections(canvas, detections)
-
-      const now = performance.now()
-      setFps(Math.round(1000 / (now - lastTime)))
-      lastTime = now
+      })()
     }, INFERENCE_INTERVAL_MS)
 
-    return () => clearInterval(intervalId)
+    return () => {
+      cancelled = true
+      clearInterval(intervalId)
+    }
   }, [cameraState.status, model])
 
   if (cameraState.status === 'requesting') {
@@ -113,14 +128,17 @@ export function CameraView({ model }: Props) {
         autoPlay
       />
 
-      {/* Segmentation overlay */}
+      {/* Segmentation overlay — same object-cover treatment keeps it aligned */}
       <canvas
         ref={canvasRef}
         className="absolute inset-0 h-full w-full object-cover"
       />
 
-      {/* HUD */}
-      <div className="absolute bottom-safe-bottom left-0 right-0 flex items-center justify-between px-4 pb-6 pt-2">
+      {/* HUD — bottom-0 + env(safe-area-inset-bottom) for iPhone notch */}
+      <div
+        className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-4 pt-2"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1.5rem)' }}
+      >
         <span className="rounded-full bg-black/40 px-3 py-1 text-xs font-mono text-green-400 backdrop-blur-sm">
           {fps} FPS
         </span>

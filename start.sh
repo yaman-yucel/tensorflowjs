@@ -25,17 +25,28 @@ elif command -v ifconfig &>/dev/null; then
   LAN_IP=$(ifconfig | awk '/inet /{print $2}' | grep -v '127.0.0.1' | head -1)
 fi
 
+# ── TLS cert check ────────────────────────────────────────────────────────────
+HTTPS_ENABLED=false
+if [[ -f "certs/cert.pem" && -f "certs/key.pem" ]]; then
+  HTTPS_ENABLED=true
+else
+  warn "No certs found — run ./setup.sh to generate self-signed certificates."
+  warn "Starting in HTTP mode (camera will only work on localhost)."
+fi
+
 echo ""
 info "Starting dev server…"
 if [[ -n "$LAN_IP" ]]; then
-  echo -e "  ${CYAN}Local   ${NC}→  http://localhost:5173"
-  echo -e "  ${CYAN}Mobile  ${NC}→  http://${LAN_IP}:5173"
-  echo ""
-  warn "Camera requires HTTPS on non-localhost origins."
-  warn "For mobile testing use one of:"
-  warn "  1) Same LAN + Chrome flags: chrome://flags/#unsafely-treat-insecure-origin-as-secure"
-  warn "  2) ngrok: ngrok http 5173  (gives a public HTTPS URL)"
-  warn "  3) Deploy with nginx.conf for full HTTPS."
+  if [[ "$HTTPS_ENABLED" == "true" ]]; then
+    echo -e "  ${CYAN}Local   ${NC}→  https://localhost:5173"
+    echo -e "  ${CYAN}Mobile  ${NC}→  https://${LAN_IP}:5173"
+    echo ""
+    warn "First visit: accept the self-signed cert warning in your browser."
+    warn "To silence it permanently, trust certs/cert.pem in your OS/device keychain."
+  else
+    echo -e "  ${CYAN}Local   ${NC}→  http://localhost:5173"
+    echo -e "  ${CYAN}Mobile  ${NC}→  http://${LAN_IP}:5173  (camera blocked — needs HTTPS)"
+  fi
 fi
 echo ""
 

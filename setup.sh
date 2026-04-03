@@ -23,6 +23,50 @@ info "Node $(node -v)  npm $(npm -v)"
 info "Installing dependencies…"
 npm install
 
+# ── Self-signed TLS certificate ──────────────────────────────────────────────
+CERT_DIR="certs"
+CERT_FILE="${CERT_DIR}/cert.pem"
+KEY_FILE="${CERT_DIR}/key.pem"
+
+if [[ -f "$CERT_FILE" && -f "$KEY_FILE" ]]; then
+  info "TLS certificates already exist in ${CERT_DIR}/ ✓"
+else
+  if ! command -v openssl &>/dev/null; then
+    error "openssl not found — cannot generate certificates."
+    error "Install openssl and re-run setup."
+    exit 1
+  fi
+
+  mkdir -p "$CERT_DIR"
+
+  # Detect LAN IP for SAN so mobile devices accept the cert
+  LAN_IP=""
+  if command -v ip &>/dev/null; then
+    LAN_IP=$(ip route get 1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1); exit}')
+  elif command -v ifconfig &>/dev/null; then
+    LAN_IP=$(ifconfig | awk '/inet /{print $2}' | grep -v '127.0.0.1' | head -1)
+  fi
+
+  SAN="DNS:localhost,IP:127.0.0.1"
+  [[ -n "$LAN_IP" ]] && SAN="${SAN},IP:${LAN_IP}"
+
+  info "Generating self-signed certificate (SAN: ${SAN})…"
+  openssl req -x509 -newkey rsa:2048 -nodes \
+    -keyout "$KEY_FILE" \
+    -out    "$CERT_FILE" \
+    -days   365 \
+    -subj   "/CN=localhost" \
+    -addext "subjectAltName=${SAN}" \
+    2>/dev/null
+
+  info "Certificate → ${CERT_FILE}  (valid 365 days)"
+  info "Key         → ${KEY_FILE}"
+  warn "Trust the cert once in your browser / system keychain to silence warnings:"
+  warn "  macOS : open ${CERT_FILE}  (Keychain Access → Always Trust)"
+  warn "  Linux : sudo cp ${CERT_FILE} /usr/local/share/ca-certificates/doc-scanner.crt && sudo update-ca-certificates"
+  warn "  Android: copy ${CERT_FILE} to phone → Settings → Security → Install certificate"
+fi
+
 # ── Model placeholder ─────────────────────────────────────────────────────────
 MODEL_DIR="public/model"
 if [[ ! -d "$MODEL_DIR" ]]; then

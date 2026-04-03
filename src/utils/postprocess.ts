@@ -46,8 +46,10 @@ export async function postprocess(
     return [raw, proto]
   })
 
-  // Pull raw predictions to CPU once
-  const rawData = await preds.data<'float32'>()
+  // Pull raw predictions to CPU once.
+  // Explicitly copy — on the CPU backend .data() returns a view into TF.js
+  // internal memory that gets recycled after dispose().
+  const rawData = new Float32Array(await preds.data<'float32'>())
   const numPreds = preds.shape[0]  // 8400
   const numCols = preds.shape[1]   // 37
 
@@ -74,8 +76,15 @@ export async function postprocess(
     const x2 = (cx + w / 2) * videoWidth
     const y2 = (cy + h / 2) * videoHeight
 
-    // tf NMS expects [y1, x1, y2, x2] normalised
-    boxes.push([y1 / videoHeight, x1 / videoWidth, y2 / videoHeight, x2 / videoWidth])
+    // tf NMS expects [y1, x1, y2, x2] normalised to [0, 1].
+    // Clamp so partially off-screen detections don't produce negative coords.
+    const clamp = (v: number) => Math.max(0, Math.min(1, v))
+    boxes.push([
+      clamp(y1 / videoHeight),
+      clamp(x1 / videoWidth),
+      clamp(y2 / videoHeight),
+      clamp(x2 / videoWidth),
+    ])
     scores.push(conf)
 
     const coeffs: number[] = []

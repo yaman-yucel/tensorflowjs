@@ -49,18 +49,21 @@ export function CameraView({ model }: Props) {
 
       const video = videoRef.current
       const canvas = canvasRef.current
-      if (!video || !canvas || video.readyState < 2 || video.videoWidth === 0) return
+      // canvas.width is 0 until loadedmetadata fires — skip to avoid wrong-sized masks
+      if (!video || !canvas || video.readyState < 2 || video.videoWidth === 0 || canvas.width === 0) return
 
       inFlight = true
 
       void (async () => {
-        const input = preprocessFrame(video)
+        let input: tf.Tensor | undefined
         let output0: tf.Tensor | undefined
         let output1: tf.Tensor | undefined
 
         try {
+          // preprocessFrame inside try so any synchronous throw is caught
+          input = preprocessFrame(video)
           // model.execute can return Tensor | Tensor[] | NamedTensorMap
-          const raw = model.execute(input)
+          const raw = model.execute(input!)
 
           if (Array.isArray(raw)) {
             ;[output0, output1] = raw
@@ -90,7 +93,7 @@ export function CameraView({ model }: Props) {
           setFps(Math.round(1000 / (now - lastTime)))
           lastTime = now
         } finally {
-          input.dispose()
+          input?.dispose()
           output0?.dispose()
           output1?.dispose()
           inFlight = false

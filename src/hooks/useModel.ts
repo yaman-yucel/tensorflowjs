@@ -13,6 +13,11 @@ export function useModel(modelUrl: string): ModelState {
     let cancelled = false
     let loadedModel: tf.GraphModel | null = null
 
+    // Reset to loading immediately so any consumer (e.g. CameraView) unmounts
+    // before the new model arrives. Without this, a modelUrl change would leave
+    // state as 'ready' with the old — soon-to-be-disposed — model reference.
+    setState({ status: 'loading' })
+
     async function load() {
       try {
         await tf.ready()

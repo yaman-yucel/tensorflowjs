@@ -41,11 +41,16 @@ export function useCamera(videoRef: React.RefObject<HTMLVideoElement | null>): C
 
         setState({ status: 'ready' })
       } catch (err) {
+        // Stop any acquired stream immediately — play() can reject (e.g. iOS
+        // autoplay policy) after the stream is already attached, leaving the
+        // camera active while an error screen is shown.
+        streamRef.current?.getTracks().forEach((t) => t.stop())
+        streamRef.current = null
+
         if (!cancelled) {
           setState({
             status: 'error',
-            message:
-              err instanceof Error ? err.message : 'Camera access denied',
+            message: err instanceof Error ? err.message : 'Camera access denied',
           })
         }
       }

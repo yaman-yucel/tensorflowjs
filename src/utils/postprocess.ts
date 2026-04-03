@@ -115,6 +115,9 @@ export async function postprocess(
   const detections: Detection[] = []
 
   for (const idx of kept) {
+    // NMS should only return valid indices, but guard defensively
+    if (idx >= coeffsList.length) continue
+
     const coeffsTensor = tf.tensor1d(coeffsList[idx]).reshape([1, 32]) as tf.Tensor2D
     // [1, 32] × [32, 160*160] → [1, 160*160]
     const maskFlat = tf.matMul(coeffsTensor, protosFlat) // [1, 25600]
@@ -131,7 +134,10 @@ export async function postprocess(
 
     maskSigmoid.dispose()
 
-    const maskData = await maskResized.data<'float32'>()
+    // Copy data BEFORE dispose — on the CPU backend .data() returns a view
+    // into the tensor's internal buffer, which gets recycled after dispose().
+    const maskView = await maskResized.data<'float32'>()
+    const maskData = new Float32Array(maskView)
     maskResized.dispose()
 
     const b = boxes[idx]
@@ -143,7 +149,7 @@ export async function postprocess(
         b[3] * videoWidth,
       ],
       score: scores[idx],
-      mask: maskData as Float32Array,
+      mask: maskData,
       maskWidth: videoWidth,
       maskHeight: videoHeight,
     })

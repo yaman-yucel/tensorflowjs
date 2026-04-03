@@ -13,6 +13,10 @@ export function useCamera(videoRef: React.RefObject<HTMLVideoElement | null>): C
     let cancelled = false
 
     async function startCamera() {
+      // Snapshot the element now — after the getUserMedia await the ref could
+      // theoretically point to a different element (concurrent rendering).
+      const videoEl = videoRef.current
+
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
@@ -30,9 +34,9 @@ export function useCamera(videoRef: React.RefObject<HTMLVideoElement | null>): C
 
         streamRef.current = stream
 
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          await videoRef.current.play()
+        if (videoEl) {
+          videoEl.srcObject = stream
+          await videoEl.play()
         }
 
         setState({ status: 'ready' })

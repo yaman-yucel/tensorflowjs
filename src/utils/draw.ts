@@ -24,24 +24,34 @@ export function drawDetections(
 
   if (detections.length === 0) return
 
+  // All masks are merged into a single ImageData before one putImageData call.
+  // Calling putImageData per-detection would overwrite previous masks because
+  // transparent pixels (alpha=0) in each ImageData erase what was drawn before.
+  drawMasks(ctx, canvas.width, canvas.height, detections)
+
   for (const det of detections) {
-    drawMask(ctx, det)
     drawBox(ctx, det)
   }
 }
 
-function drawMask(ctx: CanvasRenderingContext2D, det: Detection): void {
-  const { mask, maskWidth, maskHeight } = det
-  const imageData = ctx.createImageData(maskWidth, maskHeight)
+function drawMasks(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  detections: Detection[],
+): void {
+  const imageData = ctx.createImageData(width, height)
   const data = imageData.data
 
-  for (let i = 0; i < mask.length; i++) {
-    if (mask[i] > 0.5) {
-      const base = i * 4
-      data[base]     = MASK_R
-      data[base + 1] = MASK_G
-      data[base + 2] = MASK_B
-      data[base + 3] = MASK_A
+  for (const { mask } of detections) {
+    for (let i = 0; i < mask.length; i++) {
+      if (mask[i] > 0.5) {
+        const base = i * 4
+        data[base]     = MASK_R
+        data[base + 1] = MASK_G
+        data[base + 2] = MASK_B
+        data[base + 3] = MASK_A
+      }
     }
   }
 
